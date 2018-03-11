@@ -1,0 +1,88 @@
+---
+title: ".00_DataCleaning"
+author: "Bethany V Smith"
+date: "February 23, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(data.table)
+library(caret)
+```
+
+```{r}
+raw_train <- fread("C:/Users/betha/Desktop/EXST_7152/Group_Project/train.csv")
+raw_test <- fread("C:/Users/betha/Desktop/EXST_7152/Group_Project/test.csv")
+```
+
+```{r}
+nrow(raw_test)
+```
+
+
+```{r}
+train_count <- nrow(raw_train) 
+raw_train[,ID:= NULL] #drop training ID
+
+
+raw_test[,ID:= NULL] #dropping test ID
+raw_test<- cbind(y=0, raw_test)
+test_count <- nrow(raw_test)
+```
+
+
+Combine the two datasets for feature engineering 
+```{r}
+full <- rbind(raw_train,raw_test)
+```
+Convert Everything to factors so that we have names of each variable
+```{r}
+variable_integer_list <- names(sapply(full, is.integer))
+variable_character_list <- names(sapply(full, is.character))
+
+full[,variable_integer_list] <- lapply(full[,variable_integer_list, with=FALSE],factor)
+full[,variable_character_list] <- lapply(full[,variable_character_list, with=FALSE],factor)
+```
+
+y as numeric
+
+```{r}
+full$y <- as.numeric(as.character(full$y))
+```
+
+removing variables without any variance
+```{r}
+zerovariance_variables <- nearZeroVar(full, names=TRUE)
+zerovariance_variables
+
+```
+```{r}
+for (z in zerovariance_variables){
+    full[, eval(z) := NULL]
+}
+```
+
+
+
+```{r}
+names(full)
+ncol(full)
+```
+creating cleaned data sets that are split
+```{r}
+clean_train = full[1:train_count,]
+clean_test = full[(train_count+1):nrow(full),]
+```
+
+
+```{r}
+# Write CSV in R
+write.csv(clean_train, file = "C:/Users/betha/Desktop/EXST_7152/Group_Project/clean_train.csv")
+write.csv(clean_test, file = "C:/Users/betha/Desktop/EXST_7152/Group_Project/clean_test.csv")
+write.csv(full, file = "C:/Users/betha/Desktop/EXST_7152/Group_Project/clean_full.csv")
+```
+

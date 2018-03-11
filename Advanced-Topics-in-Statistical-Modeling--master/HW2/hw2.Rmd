@@ -1,0 +1,106 @@
+---
+title: "Hw2"
+author: "Bethany Smith"
+date: "January 25, 2018"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+#**Problem 9**
+
+##**We will now consider the Boston housing data set, from the MASS library**
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{R include=FALSE}
+library("MASS")
+library("tidyverse")
+library("stringr")
+
+attach(Boston)
+str(Boston)
+summary(Boston)
+
+
+```
+
+
+##**(a) Based on this data set, provide an estimate for the population mean of "medv". Call this estimate $\hat{\mu}$. **
+```{R}
+mu.hat <- as.table(mean(medv))
+row.names(mu.hat)<- c("Estimate of Population Mean of medv")
+
+mu.hat
+```
+
+##**(b) Provide an estimate of the standard error of $\hat{\mu}$. Interpret this result.**
+```{R}
+se.hat <- as.table((sd(Boston$medv))/(sqrt(length(Boston$medv))))
+row.names(se.hat)<- c("Estimate of Standard Error of population mean of medv")
+se.hat
+```
+##**(c) Now estimate the standard error of $\hat{\mu}$ using the bootstrap. How does this compare to your answer from (b) ?**
+```{R}
+
+boot.fn<-function(data,index){
+  mean(data[index])
+}
+boot(Boston$medv,boot.fn,1000,parallel ="multicore")
+```
+
+
+##**(d) Based on your bootstrap estimate from (c), provide a 95% confidence interval for the mean of "medv". Compare it to the results obtained using t.test(Boston$medv).**
+```{R}
+
+set.seed(1)
+n = length(Boston$medv)
+B = 506
+result = rep(NA, B)
+for (i in 1:B) {
+boot.sample = sample(n, replace = TRUE)
+result[i] = mean(sd(Boston$medv[boot.sample])/(sqrt(n)))
+}
+q<-with(Boston, mean(result))
+q <- round(q,2)
+q
+```
+
+```{R}
+n = length(Boston$medv)
+B = 506
+result = rep(NA, B)
+for (i in 1:B) {
+boot.sample = sample(n, replace = TRUE)
+result[i] = mean(Boston$medv[boot.sample])
+}
+with(Boston, mean(medv) + c(-1, 1) * 2 * sd(result))
+```
+
+
+##**(e) Based on this data set, provide an estimate, $\hat{\mu}_{med}$, for the median value of "medv" in the population.**
+```{R}
+answerE <- as.table(median(Boston$medv))
+row.names(answerE)<- c("Median estimate of medv")
+answerE
+```
+
+```{R}
+t.test(Boston$medv)
+```
+
+
+##**(f) We now would like to estimate the standard error of $\hat{\mu}_{med}$. Unfortunately, there is no simple formula for computing the standard error of the median. Instead, estimate the standard error of the median using the bootstrap. Comment on your findings.**
+
+
+
+
+
+##**(g) Based on this data set, provide an estimate for the tenth percentile of "medv" in Boston suburbs. Call this quantity $\hat{\mu}_{0.1}$.**
+```{R}
+quantile(Boston$medv,0.1)
+```
+
+
+

@@ -1,0 +1,295 @@
+---
+title: '02'
+author: "Bethany V Smith"
+date: "February 23, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library('ggplot2') # visualization
+library('ggthemes') # visualization
+library('scales') # visualization
+library('grid') # visualisation
+library('gridExtra') # visualisation
+library('corrplot') # visualisation
+library('ggfortify') # visualisation
+library('dplyr') # data manipulation
+library('readr') # data input
+library('tibble') # data wrangling
+library('stringr') # string manipulation
+library('forcats') # factor manipulation
+library('mclust') # clustering
+```
+
+```{r}
+train <- read.csv("C:/Users/betha/Desktop/EXST_7152/Group_Project/train.csv")
+test <- read.csv("C:/Users/betha/Desktop/EXST_7152/Group_Project/test.csv")
+```
+
+
+
+
+
+```{r}
+#install.packages("pls")
+
+library(pls)
+```
+
+```{r}
+glimpse(train)
+```
+
+```{r}
+library("rstan")
+library("caret")
+library("readr")
+```
+
+```{r}
+train$X0 <- NULL
+train$X2 <- NULL
+train$X5 <- NULL
+
+test$X0 <- NULL
+test$X2 <- NULL
+test$X5 <- NULL
+```
+
+
+
+```{r}
+train$ID <- NULL
+X<- model.matrix(y~., train)[,-1]
+
+IDs <- test$ID
+test$ID <- NULL
+X_test <- model.matrix(~., test)[,-1]
+y <- train$y
+```
+
+We next delete columns with near zero variance. We do this in order to make computation of the linear models feasible. This step would not be necessary if we were doing nonlinear models such as random forest etc. 
+
+```{r}
+zerovariance <- nearZeroVar(X) #function in caret package for computing variables with near zero vairance
+zerovariance
+X<- X[,-zerovariance]
+X_test <- X_test[,-zerovariance]
+```
+
+
+by removing those variables with nearly zero evidence we reduce the number of inputs for modeling from 386 to 168 variables. 
+
+
+
+
+```{r}
+dim(X)
+dim(X_test)
+```
+
+#Ridge Regression
+
+
+```{r}
+library(glmnet)
+```
+
+```{r}
+fit.ridge.full <- glmnet(X, y, alpha=0)
+cv.ridge = cv.glmnet(X,y, alpha=0)
+
+par(mfrow=c(1,2))
+plot(fit.ridge.full, xvar="lambda", label=TRUE)
+plot(cv.ridge)
+```
+
+
+
+
+
+
+```{r}
+bestlam.ridge=cv.ridge$lambda.min
+bestlam.ridge
+exp(bestlam.ridge)
+```
+
+
+```{r}
+ridge.predict= predict(cv.ridge,type="coefficients", s=bestlam.ridge, newx = X_test)
+
+
+```
+
+```{r}
+ridge.Yhat <- predict(fit.ridge.full, type="response", s=bestlam.ridge, newx=X_test)
+```
+
+###Calculating Lasso model fit statistics
+
+```{r}
+
+ridge.R2 <- function(Y,R.Yhat){
+  R2 <- (abs(1 - (sum((Y-R.Yhat)^2)/sum((Y-mean(Y))^2))))
+  return(R2)
+}
+ridge.MSE <- function(Y,R.Yhat){
+  return(mean((R.Yhat-(mean(Y)))^2))
+}
+ridge.SSE <- function(Y, R.Yhat){
+  SSE <- (sum((Y-R.Yhat)^2))
+  return(SSE)
+}
+ridge.SSR <- function(Y, R.Yhat){
+  SSR <- (sum((R.Yhat- (mean(Y)))^2))
+  return(SSR)
+}
+ridge.SSTO <- function(Y, R.Yhat){
+  SSTO <- (sum((Y- (mean(R.Yhat)))^2))
+  return(SSTO)
+}
+
+
+
+```
+
+
+```{r}
+print('Ridge r2 score')
+ridge.R2(y, ridge.Yhat) 
+```
+
+```{r}
+print('Ridge MSE')
+ridge.MSE(y,ridge.Yhat)
+```
+
+```{r}
+print('Ridge SSE')
+ridge.SSE(y,ridge.Yhat)
+```
+
+```{r}
+print('Ridge SSR')
+ridge.SSR(y,ridge.Yhat)
+```
+
+```{r}
+print('Ridge SSTO')
+ridge.SSTO(y,ridge.Yhat)
+```
+
+
+#Lasso
+
+```{r}
+library(lars)
+library(glmnet)
+```
+
+```{r}
+lasso.cv.glm <- cv.glmnet(X, y, nfolds=10, type.measure="mse", alpha=1)
+plot(lasso.cv.glm)
+```
+```{r}
+lasso.cv.glm$lambda.min
+```
+
+```{r}
+fit.lasso.full <- glmnet(X, y, alpha=1)
+par(mfrow=c(1,2))
+plot(fit.lasso.full, xvar="lambda", label=TRUE)
+plot(lasso.fit, lwd=2, breaks=F)
+```
+
+```{r}
+
+lasso.cv <- cv.lars(X, y, K=10, trace=F, plot.it=T, se=T, type="lasso")
+
+```
+
+```{r}
+op.frac.lasso <- lasso.cv$index[which.min(lasso.cv$cv)]
+op.frac.lasso
+```
+
+```{r}
+lasso.fit <- lars(X,y,type="lasso")
+
+```
+
+
+
+```{r}
+beta <- predict(lasso.fit, X_test, s=op.frac.lasso,type="coef", mode="fraction")$coef
+beta[beta !=0]
+
+```
+```{r}
+y.pred <- predict(lasso.fit,X_test, s=op.frac.lasso, type="fit", mode="fraction")$fit
+
+```
+
+
+
+###Calculating Lasso model fit statistics
+
+```{r}
+
+lasso.R2 <- function(Y,Yhat){
+  R2 <- (abs(1 - (sum((Y-Yhat)^2)/sum((Y-mean(Y))^2))))
+  return(R2)
+}
+lasso.MSE <- function(Y,Yhat){
+  return(mean((Yhat-(mean(Y)))^2))
+}
+lasso.SSE <- function(Y, Yhat){
+  SSE <- (sum((Y-Yhat)^2))
+  return(SSE)
+}
+lasso.SSR <- function(Y, Yhat){
+  SSR <- (sum((Yhat- (mean(Y)))^2))
+  return(SSR)
+}
+lasso.SSTO <- function(Y, Yhat){
+  SSTO <- (sum((Y- (mean(Yhat)))^2))
+  return(SSTO)
+}
+
+
+
+```
+```{r}
+print('Lasso r2 score')
+lasso.R2(y, y.pred) 
+```
+
+```{r}
+print('Lasso MSE')
+lasso.MSE(y,y.pred)
+```
+
+```{r}
+print('Lasso SSE')
+lasso.SSE(y,y.pred)
+```
+
+```{r}
+print('Lasso SSR')
+lasso.SSR(y,y.pred)
+```
+
+```{r}
+print('Lasso SSTO')
+lasso.SSTO(y,y.pred)
+```
+
+
+
+
+

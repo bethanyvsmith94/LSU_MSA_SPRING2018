@@ -1,0 +1,141 @@
+---
+title: "Untitled"
+author: "Bethany Smith"
+date: "January 26, 2018"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#**Problem 9**
+
+##**We will now consider the Boston housing data set, from the MASS library**
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{R include=FALSE}
+library("MASS")
+library("tidyverse")
+library("stringr")
+library("boot")
+attach(Boston)
+target <- select(Boston,medv)
+str(target)
+
+```
+
+```{R}
+
+
+target <- Boston$medv
+str(target)
+n = length(medv) 
+xbar = mean(target) # sample mean
+n 
+```
+
+
+##**(a) Based on this data set, provide an estimate for the population mean of "medv". Call this estimate $\hat{\mu}$. **
+```{R}
+ 
+mu <- mean(target)
+mu
+sd()
+```
+
+##**(b) Provide an estimate of the standard error of $\hat{\mu}$. Interpret this result.**
+```{R}
+mu.se <- (sd(target)/sqrt(length(target)))
+mu.se
+```
+##**(c) Now estimate the standard error of $\hat{\mu}$ using the bootstrap. How does this compare to your answer from (b) ?**
+```{R}
+
+u0 <- mean(target)
+sh <- sd(target)/sqrt(n)
+thetas <- NULL
+for (i in 1:B){
+  xx <- sample(medv,n,replace = T)
+  u <- mean (xx)
+  thetas [i] <- u
+}
+sd(thetas)
+
+```
+
+
+
+
+##**(d) Based on your bootstrap estimate from (c), provide a 95% confidence interval for the mean of "medv". Compare it to the results obtained using t.test(Boston$medv).**
+
+
+```{R}
+set.seed(5462)
+n= length(target)
+B=1000
+thetas <- NULL
+  for (i in 1:B){
+    newSam <- sample(medv,n,replace = TRUE)
+    u <- mean(newSam)
+    thetas[i] <- u
+  }
+c(u0,mean(thetas))
+quantile(thetas,probs = c(0.025,0.975))
+
+```
+
+
+##**(e) Based on this data set, provide an estimate, $\hat{\mu}_{med}$, for the median value of "medv" in the population.**
+```{R}
+median(target)
+```
+
+
+
+
+##**(f) We now would like to estimate the standard error of $\hat{\mu}_{med}$. Unfortunately, there is no simple formula for computing the standard error of the median. Instead, estimate the standard error of the median using the bootstrap. Comment on your findings.**
+
+```{R}
+
+
+set.seed(2222)
+n= length(target)
+B=1000
+boot.thetas <- rep(0:B)
+  for (i in 1:B){
+    newSam <- sample(medv,n,replace = TRUE)
+    u <- median(newSam)
+    boot.thetas[i] <- u
+    
+  }
+boot.se <- sqrt(var(boot.thetas))
+boot.se
+
+```
+
+
+
+##**(g) Based on this data set, provide an estimate for the tenth percentile of "medv" in Boston suburbs. Call this quantity $\hat{\mu}_{0.1}$.**
+```{R}
+
+```
+
+
+
+
+```{R}
+```
+
+```{R}
+```
+
+```{R}
+```
+
+
+

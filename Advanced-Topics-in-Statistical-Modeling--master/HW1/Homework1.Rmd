@@ -1,0 +1,295 @@
+---
+title: "Homework1"
+author: "Bethany Smith"
+date: "January 19, 2018"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE, tidy=TRUE}
+
+library("formatR")
+library("tidyverse")
+library("corrplot")
+library("ISLR")
+library("heatmap.plus")
+
+```
+
+#**Problem 8**
+
+###**(A)**
+####**Use the read.csv() function to read the data into R. Call the loaded data college. Make sure that you have the directory set to the correct location for the data.**
+
+
+```{R}
+
+college <- read.csv("College.csv")
+```
+
+###**(B)**
+#### **Look at the data using the fix() function. You should notice that the first column is just the name of each university. We don’t really want R to treat this as data. However, it may be handy to have these names for later**
+
+
+```{R}
+fix(college)
+```
+
+####**You should notice that the first column is just the name of each university. We don’t really want R to treat this as data. However, it may be handy to have these names for later.**
+
+```{R}
+
+rownames <- college[, 1]
+college <- college[, -1]
+head(college[, 1:5])
+fix(college)
+```
+
+
+###**(C)**
+
+####**i. Use the summary() function to produce a numerical summary of the variables in the data set**
+
+*We see from the numerical summary outputed below the Minimum, Maximum, Mean, Median etc. for each variable found in the college data set. From initially looking at the data it appears as if all of the variables are numeric continuous while the Private variable is categorical. We see that there are wide ranges of values that our variables fall into, some have quite large minimums and maximum while others have rather small minimum and maximums. If we were doing any sort of predictive modeling with the college data set we may want to consider standardizing the variables to account for these large deviations in scale across all variables.*
+
+```{R}
+
+summary(college)
+```
+
+####**ii. Use the pairs() function to produce a scatterplot matrix of the first ten columns or variables of the data. Recall that you can reference the first ten columns of a matrix A using A[,1:10].**
+
+```{R}
+pairs(college[,1:10])
+
+```
+
+####**iii. Use the plot() function to produce side-by-side boxplots of Outstate versus Private.**
+
+```{R}
+plot(college$Private, college$Outstate, xlab="Private University", ylab= "Out of State Tuition", main = "Out of State Tuition Plot")
+```
+*We see from the above boxplot that Private Universities tend to have a higher average out of state tuition than public universities. Public universities, overall, have a lower average out of state tution that private univiersities do*
+
+
+####**iv. Create a new qualitative variable, called Elite, by binning the Top10perc variable. We are going to divide universities into two groups based on whether or not the proportion of students coming from the top 10 % of their high school classes exceeds 50 %.**
+
+
+```{R}
+Elite = rep("No", nrow(college))
+Elite[college$Top10perc > 50] = "Yes"
+Elite= as.factor(Elite)
+college = data.frame(college,Elite)
+
+```
+
+####**Use the summary() funcation to see how many elite universities there are.**
+
+
+```{R}
+summary(college$Elite)
+```
+*There are a total of 78 elite universities and  699  non elite universities within the college data set. *
+
+
+####**Now use the plot() function to produce side-by-side boxplots of Outstate versus Elite**
+
+```{R}
+plot(college$Elite, college$Outstate, xlab= "Elite University", ylab= "Out of State Tuition", main = "Out of State Tuition plot of Elite vs. Non-Elite Universities")
+```
+*Based on the box plot above: the average of out of state tuition is substantially higher for those universities considered "Elite". Those students who are out of state and are concerned about tuition would be wise to explore there options at univierisites not considered "Elite".*
+
+####**v. Use the hist() function to produce some histograms with differing numbers of bins for a few of the quantitative variables. You may find the command par(mfrow=c(2,2)) useful: it will divide the print window into four regions so that four plots can be made simultaneously. Modifying the arguments to this function will divide the screen in other ways.**
+
+```{R}
+par(mfrow=c(2,2))
+hist(college$Outstate,col=2, xlab="Out of State Tuition", ylab = "Frequency", main="Overall Out of State Tuition")
+hist(college$Books,col=4, xlab="Estimated Book Costs", ylab= "Frequency", main = "Overall Estimated Book Costs")
+hist(college$Personal, col=6, xlab= "Estimated Personal Costs", ylab="Frequency", main="Overall Estimated Personal Spending")
+
+hist(college$Expend, col=8, xlab= "Estimated Instructional Expenditure", ylab="Frequency", main="Overall Estimated Instructional Expenditure")
+
+
+```
+
+*We see from the histograms above that overall there is a large amount of variation between the estimates collected for the overall out of state tuition costs. Estimated instructional expenditure finds the largest frequency (over 400 total estimated) of estimates falling between $5,000 and $10,000.*
+
+####**vi. Continue exploring the data, and provide a brief summary of what you discover.**
+
+```{R}
+plot(college$Top10perc, college$Grad.Rate, xlab="Students from top 10% of Graduating HS Class", ylab = "Universities Graduation Rate", main = "Graduation Rate & Top 10% of HS students")
+```
+
+*We can see from the above  scatterplot that those universities whose student bodies have a larger proportion of students who were among the top 10% of students in their high school graduating class are not necessarily associated with higher graduation rates. The same is true for those universities whose student bodies have a larger proportion of students who were among the top 25% of students in their high school graduating class. *
+
+```{R}
+plot(college$Top25perc, college$Grad.Rate, xlab="% of university students in top 25%", ylab = "Universities Graduation Rate", main = "Graduation Rate & Top 25% of HS students")
+```
+
+
+```{R}
+
+
+college2 = select(college, Private, Apps, Accept, Enroll, Top10perc, Top25perc, F.Undergrad, P.Undergrad, Outstate, Room.Board, Books, Personal, PhD, Terminal, S.F.Ratio, perc.alumni, Expend, Grad.Rate)
+college2$Private = as.numeric(college2$Private)
+correlation1 = cor(college2)
+corrplot(correlation1)
+
+
+
+```
+
+
+*We investigate the association and relationships amongst the variables within the college data set by first visually inspecting the correlation plot above. We see that the variables Applications, Accept, and Enroll are highly correlated, top 10 percent is correlated with out of state, PhD, Expenditure, and graduation rate.Furthermore, terminal and PhD are highly correlated. To further investigate the correlation amongst these variables we next explore the pearson correlation coefficients to assess whether there is further evidence to support the conclusions made from the visual inspection of association amongst the variables. *
+
+```{R}
+A <- cor(college2)
+A <- round(A,digits = 2)
+A <- as.table(A, nrow(19), ncol(19))
+
+A
+```
+
+*The table above displays the pearson correlation coefficients for the variables found within the college dataset. Values above .5 that are either positive or negative, tend to be good indications of correlation, the closer a value is to positive or negative one the stronger the association between those two variables. We conclude that our visual inspection and the conclusions made above are valid. Below is a summary of the insight gathered about the association and relationships amongst the college data set variables : *
+
+*Applications are highly correlated with Accept (.94), Enroll (.85), Full Time Undergraduates (.814) Furthermore, there is a lack of* *correlation between applications and Student/Faculty ratio (.10), Book Expenditure (.13), and Graduation Rate (.15). *
+
+*Top 10 percent is highly correlated with out of state tuition (.56), percent of facult with PhD's (.53), stimated instructional expenditure* *per student (.66) and is marginally associated with Graduation Rate (.49). This conclusion about top 10 percent and graduation rate provides further evidence in support of the conclusions drawn based off of scatterplot above*
+
+#**Problem 9**
+
+####**This exercise involves the Auto data set studied in the lab. Make sure that the missing values have been removed from the data.**
+
+```{R}
+Auto <- read.csv("Auto.csv", header=T, na.strings = "?")
+fix(Auto)
+dim(Auto)
+Auto= na.omit(Auto)
+dim(Auto)
+names(Auto)
+```
+
+###**(A)** 
+
+####**Which of the predictors are quantitative, and which are qualitative?**
+
+*We see that the variable "name" is a qualitative variable. The remaining eight variables are quantitative, they are: mpg, cylinders, displacement, horsepower, weight, acceleration, year, origin.However, due to the fact that the variable origin only has three unique values, we can conclude that this is a categorical variable and should be treated as qualitative rather than quantitative.Furthermore, Cylinders only has 8 unique values, we could treat it as a quantitative or qualitative variable, for this analysis I choose to treat it as a qualitative variable.*
+
+```{R}
+summary(Auto)
+Auto$cylinders = as.factor(Auto$cylinders)
+```
+
+*We see that origin only has three categories, the minimum value being one and the maximum value being three.Below is the code used to try and determine what the levels of origin stand for: *
+
+```{R}
+
+head(unique(Auto$name[Auto$origin==1]),11)
+head(unique(Auto$name[Auto$origin==2]),11)
+head(unique(Auto$name[Auto$origin==3]),11)
+```
+
+
+*from looking at the origin variable alongside the name of the manufacture at each level of origin we can conclude that each level of origin correlates to manufacturers found in specific countries/regions as so: 1=United States 2=European 3= Japenese. We fix the origin variable into a factor with the following code:* 
+```{R}
+Auto$origin <- factor(Auto$origin, levels=1:3, labels= c("United States", "Europe", "Japan"))
+sapply(Auto,class)
+```
+
+*In sum the auto datasets variables can be summarized as follows: Quantitative: mpg, displacement, horsepower, weight, acceleration, year Qualitative : cylinders, origin, name*
+
+###**(B)** 
+
+####**What is the range of each quantitative predictor? You can answer this using the range() function.**
+
+```{R}
+
+quantitative <- sapply(Auto, is.numeric)
+B <- sapply(Auto[,quantitative], function(x) c(range(x)))
+row.names(B) <- c("Minimum", "Maximum")
+```
+*The range of each quantitative predictor is shown in the table below*
+```{R}
+b <- as.table(B,nrow(3), ncol(7))
+b
+
+```
+
+
+###**(C)** 
+
+####**What is the mean and standard deviation of each quantitative predictor?**
+
+*The mean and standard deviation  of each quantitative predictor is shown in the table below:*
+```{R}
+
+quantitative <- sapply(Auto, is.numeric)
+S <- sapply(Auto[,quantitative], function(x) c(mean(x), sd(x)))
+row.names(S) <- c("Mean", "Standard Deviation")
+S
+```
+
+###**(D)** 
+
+####**Now remove the 10th through 85th observations.What is the range, mean, and standard deviation of each predictor in the subset of the data that remains?**
+
+*After removing the 10th through 85th observations, the range, mean, and standard deviation of each quantitative variable is displayed in the output below:*
+
+```{R}
+Auto_new <- sapply(Auto[-10:-85,quantitative], function(x) c(range(x), mean(x), sd(x)))
+row.names(Auto_new) <- c("Minimum", "Maximum", "Mean", "Standard Deviation")
+Auto_new
+
+```
+
+###**(E)** 
+
+####**Using the full data set, investigate the predictors graphically, using scatterplots or other tools of your choice. Create some plots highlighting the relationships among the predictors. Comment on your findings.**
+
+```{R}
+
+Auto$year <- as.factor(Auto$year)
+Auto$origin <- as.factor(Auto$origin)
+pairs(Auto)
+
+```
+
+```{R}
+plot(Auto$cylinders,Auto$horsepower, xlab= "Number of Cylinders on Vehicle", ylab="Horsepower associated with Vehicle", main="How cylinders and horsepower are associated on vehicles")
+
+
+```
+
+
+```{R}
+auto = select(Auto, mpg, cylinders, displacement, horsepower, weight, acceleration, year, origin)
+auto$cylinders = as.numeric(auto$cylinders)
+auto$year = as.numeric(auto$year)
+auto$origin = as.numeric(auto$origin)
+correlation = cor(auto)
+corrplot(correlation)
+```
+
+
+
+
+*Additionally we see a that year is most correlated with miles per gallon on a vehicle, that is newer vehicles are associated with better gas mileage. Furthermore, cylinders is most correlated with displacement, horsepower, and weight.* 
+
+###**(F)** 
+####**Suppose that we wish to predict gas mileage (mpg) on the basis of the other variables.Do your plots suggest that any of the other variables might be useful in predicting mpg? Justify your answer.**
+
+*We would expect from the plots above, that weight, displacement, horsepower, and year to be good predictors of mpg. From calculating the correlations amongst the quantitative variables we get the correlation coefficients for each variable. We see that cylinders(-.78), displacement(-0.81), horespower(-0.78) and weight(-0.83) are negatively correlated with mpg and year (0.58) is somewhat possitively correlated with mpg. The correlation coefficient for each variable with mpg is displayed below and is mentioned within parentheses in the previous sentence.* 
+
+
+*However we see that cylinders, displacement,weight, and horsepower are highly correlated, thus it would be best to use one of these variables. Out of the four, weight should be used due to the fact that it has the highest correlation with mpg of the Four. Year and origin should also be used due to the fact that they have correlation coefficients with mpg greater than (.5).*
+
+```{R}
+
+
+correlation <- round(correlation,digits = 2)
+Q <- as.table(correlation, nrow(9), ncol(9))
+
+Q
+
+```

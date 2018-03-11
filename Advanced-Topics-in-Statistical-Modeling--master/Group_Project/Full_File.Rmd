@@ -1,0 +1,576 @@
+---
+title: "Untitled"
+author: "Bethany V Smith"
+date: "March 7, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#  Ben Li Group Project - Mercedes-Benz Data 
+## Group Members: Bethany Smith, Jeremy Demlow, Brandon Eddlestone, Amy C. Gray
+### Bethany Smiths Contribution to Analysis 
+
+Since the first automobile, the Benz Patent Motor Car in 1886, Mercedes-Benz has stood for important automotive innovations. These include, for example, the passenger safety cell with crumple zone, the airbag and intelligent assistance systems. Mercedes-Benz applies for nearly 2000 patents per year, making the brand the European leader among premium car makers. Daimler’s Mercedes-Benz cars are leaders in the premium car industry. With a huge selection of features and options, customers can choose the customized Mercedes-Benz of their dreams. .
+
+To ensure the safety and reliability of each and every unique car configuration before they hit the road, Daimler’s engineers have developed a robust testing system. But, optimizing the speed of their testing system for so many possible feature combinations is complex and time-consuming without a powerful algorithmic approach. As one of the world’s biggest manufacturers of premium cars, safety and efficiency are paramount on Daimler’s production lines.
+
+
+
+In this analysis , we are challenged to tackle the curse of dimensionality and reduce the time that cars spend on the test bench. We will work with this dataset representing different permutations of Mercedes-Benz car features to predict the time it takes to pass testing. Results of this analysis may contribute to speedier testing, resulting in lower carbon dioxide emissions without reducing Daimler’s standards.
+
+# DATA CLEANING PHASE 
+
+```{r echo=FALSE}
+library('ggplot2') # visualization
+library('ggthemes') # visualization
+library('scales') # visualization
+library('grid') # visualisation
+library('gridExtra') # visualisation
+library('corrplot') # visualisation
+library('ggfortify') # visualisation
+library('dplyr') # data manipulation
+library('readr') # data input
+library('tibble') # data wrangling
+library('stringr') # string manipulation
+library('forcats') # factor manipulation
+library('mclust') # clustering
+library(data.table)
+library(caret)
+
+```
+
+```{r}
+raw_train <- fread("C:/Users/betha/Desktop/EXST_7152/Group_Project/train.csv")
+raw_test <- fread("C:/Users/betha/Desktop/EXST_7152/Group_Project/test.csv")
+```
+
+We see that the training data set has a total of 385 unique variables and a total of 4209 observations. The data set has eight categorical variables and 377 numeric continuous observations.
+
+```{r echo=FALSE}
+train_count <- nrow(raw_train) 
+raw_train[,ID:= NULL] #drop training ID
+
+
+raw_test[,ID:= NULL] #dropping test ID
+raw_test<- cbind(y=0, raw_test)
+test_count <- nrow(raw_test)
+```
+
+```{r}
+#Combine the two datasets for feature engineering 
+
+full <- rbind(raw_train,raw_test)
+
+```
+
+
+```{r}
+#Convert Everything to factors so that we have names of each variable
+
+variable_integer_list <- names(sapply(full, is.integer))
+variable_character_list <- names(sapply(full, is.character))
+
+full[,variable_integer_list] <- lapply(full[,variable_integer_list, with=FALSE],factor)
+full[,variable_character_list] <- lapply(full[,variable_character_list, with=FALSE],factor)
+```
+
+```{r}
+#y as numeric
+full$y <- as.numeric(as.character(full$y))
+```
+
+```{r}
+#removing variables without any variance 
+
+zerovariance_variables <- nearZeroVar(full, names=TRUE)
+zerovariance_variables
+```
+
+```{r}
+for (z in zerovariance_variables){
+    full[, eval(z) := NULL]
+}
+```
+
+```{r}
+names(full)
+ncol(full)
+```
+
+```{r}
+#creating cleaned data sets that are split
+clean_train = full[1:train_count,]
+clean_test = full[(train_count+1):nrow(full),]
+
+```
+
+```{r}
+# Write CSV in R
+write.csv(clean_train, file = "C:/Users/betha/Desktop/EXST_7152/Group_Project/clean_train.csv")
+write.csv(clean_test, file = "C:/Users/betha/Desktop/EXST_7152/Group_Project/clean_test.csv")
+write.csv(full, file = "C:/Users/betha/Desktop/EXST_7152/Group_Project/clean_full.csv")
+```
+
+# EXPLORATORY ANALYSIS 
+
+```{r}
+library('ggplot2') # visualization
+library('ggthemes') # visualization
+library('scales') # visualization
+library('grid') # visualisation
+library('gridExtra') # visualisation
+library('corrplot') # visualisation
+library('ggfortify') # visualisation
+library('dplyr') # data manipulation
+library('tibble') # data wrangling
+library('stringr') # string manipulation
+library('forcats') # factor manipulation
+library('mclust') # clustering
+library('dplyr') # data manipulation
+library('readr') # data input
+library('tibble') # data wrangling
+library('stringr') # string manipulation
+library('forcats') # factor manipulation
+library('mclust') # clustering
+```
+
+
+```{r}
+for (i in seq(2,8)){
+  print(str_c("Feature", colnames(full)[i], "has these unique values:", sep=" "))
+  print(str_sort(unique(full[[i]])))
+}
+```
+
+Also, all values follow a similar pattern of encoding by one or two letters. We dont know what these letter codes represent, but since we are dealing with car customisation it seems resonable to assume that they encode multiple-choice features for your car specifications. 
+(As an aside: I can imagine that one could make an educated guess about the real identity of these multi-level features from the number of the levels and their popularity in our data, if one were inclined to do so.)
+
+```{r}
+#I next want to recode the categorical variables as factors.
+train <- clean_train %>%
+  mutate_at(vars(X0:X8), funs(factor))
+
+
+
+train_f <- clean_train %>%
+  mutate_at(vars(starts_with("X")), funs(factor))
+
+
+
+```
+Below we look at the correlation between those categorical variables in the training data set. Those variables that were initally loaded as text variables, and that were manipulated above to be factors.
+```{r}
+train %>%
+  select(y,X0:X8) %>%
+  mutate_at(vars(starts_with("X")), funs(as.integer)) %>%
+  cor(use="complete.obs", method="pearson") %>%
+  corrplot(type="lower", method="number", diag=FALSE)
+```
+We see from the plot above that those categorical variables with somewhat decent correlation with our target variable y. However, none of these correlations are greater than .5 thus none of the correlations are significant, while others basically have no correlation at all.
+```{r}
+train %>%
+  ggplot(aes(y)) +
+  geom_histogram(colour="red", bins = length(train$y)/3) +
+  geom_density() +
+  labs(x = "y - testing time in seconds")
+```
+
+Above is a histogram/density plot of the distribution of the target variable y- testing time in seconds. We see a couple of things from this plot above:
+there is a wide variation in the units of y with what appears to be the largest value of y being greater than 250 while the lowest is less than 75 seconds.
+The highest density peak in our graph is less than 100, at what is estimated to be roughly y=25 seconds. The second highest density peak is at roughly y=110 seconds and the third highest peak is estimated to be at y=100 seconds.
+It appears as if from this histogram/density plot above that we have one extreme observation (outlier) of the dependent variable estimated to be y=265.
+
+Below we re-draw the distribution with these highest peaks outlined in red, to distinguish them.
+
+```{r}
+train %>%
+  ggplot(aes(y)) +
+  geom_vline(xintercept = c(76,90,100,110), colour="red")+
+  geom_histogram(colour="yellow", bins = length(train$y)/3) +
+  geom_density() +
+  labs(x = "y - testing time in seconds")
+```
+We next try to further identify key points within out plot above, to identify the key lowest points in the distribution. The key lowest points are: 1. y=80 2. y=95 3. y=105
+Below we further identify the lower points of the distribution by putting blue lines at these points.
+
+```{r}
+train %>%
+  ggplot(aes(y)) +
+  geom_vline(xintercept = c(76,90,100,110), colour="red")+
+  geom_vline(xintercept = c(80,95,105), colour="blue")+
+  geom_histogram(colour="yellow", bins = length(train$y)/3) +
+  geom_density() +
+  labs(x = "y - testing time in seconds")
+
+```
+
+Next in order to make the x axis easier to read, but still accounting for the large time-scales of specific observations we can place a logarithmic scale on this plot. We do this in the code below.
+
+```{r}
+
+train %>%
+  ggplot(aes(y)) +
+  geom_vline(xintercept = c(76,90,100,110), colour="red")+ #taking those 3 bins and highlighting in red the 4 main peaks of the data 
+  geom_vline(xintercept = c(80,95,105), colour="blue")+  #highlighting in blue the 3 lowest peaks within the binned data
+  geom_histogram(colour="yellow", bins = length(train$y)/3) + #dividing the data into three bins
+  geom_density() + #fitting the density
+  scale_x_log10(breaks=c(seq(70,150,10),seq(170,270,20)) ) + 
+  labs(x = "y - testing time in seconds")
+
+```
+
+```{r}
+train <- train %>%
+  filter(y < 250)
+ggplot(train, aes(reorder(X0, y, FUN = median) , y)) + geom_boxplot() + labs(x = "X0") +
+  geom_jitter(color="red", width = 0.2, size = 0.4)
+```
+
+```{r}
+
+ggplot(train, aes(reorder(X1, y, FUN=median), y)) +
+  geom_boxplot()+
+  labs(x="X1")+
+  geom_jitter(color='blue', width=.02, size=.04)
+
+```
+
+```{r}
+ggplot(train, aes(reorder(X2, y, FUN=median), y))+
+  geom_boxplot()+
+  labs(x="X2")+
+  geom_jitter(color="blue", width=.2, size=.4)
+```
+
+```{r}
+ggplot(train, aes(reorder(X3, y, FUN=median),y)) + 
+  geom_boxplot() +
+  labs(x="X3")+
+  geom_jitter(color="blue", width=.2, size=.4)
+```
+
+```{r}
+ggplot(train, aes(reorder(X5, y, FUN=median),y)) + 
+  geom_boxplot() +
+  labs(x="X5")+
+  geom_jitter(color="blue", width=.2, size=.4)
+```
+
+```{r}
+ggplot(train, aes(reorder(X6, y, FUN=median),y)) + 
+  geom_boxplot() +
+  labs(x="X6")+
+  geom_jitter(color="blue", width=.2, size=.4)
+```
+
+
+```{r}
+ggplot(train, aes(reorder(X8, y, FUN=median),y)) + 
+  geom_boxplot() +
+  labs(x="X8")+
+  geom_jitter(color="blue", width=.4, size=.6)
+```
+
+```{r}
+ggplot(train, aes(X0, y))+ geom_bar(stat="identity", fill="darkblue") + scale_x_discrete("X0")
+
+```
+
+```{r}
+ggplot(train, aes(X1, y))+ geom_bar(stat="identity", fill="darkblue") + scale_x_discrete("X1")
+
+```
+
+```{r}
+ggplot(train, aes(X2, y))+ geom_bar(stat="identity", fill="darkblue") + scale_x_discrete("X2")
+
+```
+
+```{r}
+ggplot(train, aes(X3, y))+ geom_bar(stat="identity", fill="darkblue") + scale_x_discrete("X3")
+
+```
+
+```{r}
+ggplot(train, aes(X5, y))+ geom_bar(stat="identity", fill="darkblue") + scale_x_discrete("X5")
+
+```
+
+```{r}
+ggplot(train, aes(X6, y))+ geom_bar(stat="identity", fill="darkblue") + scale_x_discrete("X6")
+
+
+```
+
+
+```{r}
+ggplot(train, aes(X8, y))+ geom_bar(stat="identity", fill="darkblue") + scale_x_discrete("X8")
+
+```
+
+```{r}
+train <- read.csv("C:/Users/betha/Desktop/EXST_7152/Group_Project/clean_train.csv")
+test <- read.csv("C:/Users/betha/Desktop/EXST_7152/Group_Project/clean_test.csv")
+full <- read.csv("C:/Users/betha/Desktop/EXST_7152/Group_Project/clean_full.csv")
+#removing multicolinearity
+require(corrplot)
+t <- cor(train[,-c(1,3:10)])
+highlyCorrelation <- findCorrelation(t,cutoff = 0.95, names = T)
+
+train[,highlyCorrelation] <- NULL
+test[,highlyCorrelation] <- NULL
+image(as.matrix(train[,-c(1:10)]), main="Heatmap of binary data")
+```
+
+# MODELING PHASE
+
+```{r}
+library('ggplot2') # visualization
+library('ggthemes') # visualization
+library('scales') # visualization
+library('grid') # visualisation
+library('gridExtra') # visualisation
+library('corrplot') # visualisation
+library('dplyr') # data manipulation
+library('readr') # data input
+library('tibble') # data wrangling
+library('stringr') # string manipulation
+library('forcats') # factor manipulation
+library('mclust') # clustering
+library(pls) #partial least squares
+library("rstan")
+library("caret")
+library(glmnet)
+library(lars)
+
+```
+
+```{r}
+train$X <- NULL
+train$X0 <- NULL
+train$X2 <- NULL
+train$X5 <- NULL
+
+test$X <- NULL
+test$X0 <- NULL
+test$X2 <- NULL
+test$X5 <- NULL
+str(test)
+```
+
+Preparing data for ridge,lasso,pls models
+
+```{r}
+X<- model.matrix(y~., train)[,-1]
+
+
+X_test <- model.matrix(y~., test)[,-1]
+
+y <- train$y
+dim(X)
+```
+
+```{r}
+dim(X_test)
+```
+
+## RIDGE REGRESSION 
+
+```{r}
+fit.ridge.full <- glmnet(X, y, alpha=0)
+cv.ridge = cv.glmnet(X,y, alpha=0)
+
+par(mfrow=c(2,2))
+plot(fit.ridge.full, xvar="lambda", label=TRUE)
+plot(cv.ridge)
+```
+
+
+```{r}
+bestlam.ridge=cv.ridge$lambda.min #Getting lambda that gives smallest MSE
+bestlam.ridge
+```
+
+```{r}
+ridge.predict= predict(cv.ridge,type="coefficients", s=bestlam.ridge, newx = X_test)
+ridge.Yhat <- predict(fit.ridge.full, type="response", s=bestlam.ridge, newx=X_test)
+```
+
+Calculating Ridge Model Fit Statistics 
+
+```{r}
+ridge.R2 <- function(Y,R.Yhat){
+  R2 <- (abs(1 - (sum((Y-R.Yhat)^2)/sum((Y-mean(Y))^2))))
+  return(R2)
+}
+ridge.MSE <- function(Y,R.Yhat){
+  return(mean((R.Yhat-(mean(Y)))^2))
+}
+ridge.SSE <- function(Y, R.Yhat){
+  SSE <- (sum((Y-R.Yhat)^2))
+  return(SSE)
+}
+ridge.SSR <- function(Y, R.Yhat){
+  SSR <- (sum((R.Yhat- (mean(Y)))^2))
+  return(SSR)
+}
+ridge.SSTO <- function(Y, R.Yhat){
+  SSTO <- (sum((Y- (mean(R.Yhat)))^2))
+  return(SSTO)
+}
+```
+
+```{r}
+print('Ridge r2 score')
+ridge.R2(y, ridge.Yhat) 
+print('Ridge MSE')
+ridge.MSE(y,ridge.Yhat)
+print('Ridge SSE')
+ridge.SSE(y,ridge.Yhat)
+print('Ridge SSR')
+ridge.SSR(y,ridge.Yhat)
+print('Ridge SSTO')
+ridge.SSTO(y,ridge.Yhat)
+```
+
+## LASSO REGRESSION 
+
+Performing Lasso Cross Validation in order to get best lambda that provides the minimum mean squared error for model fit
+
+```{r}
+lasso.cv.glm <- cv.glmnet(X, y, nfolds=10, type.measure="mse", alpha=1) 
+plot(lasso.cv.glm)
+```
+
+```{r}
+lasso.cv.glm$lambda.min #value of lambda that gives us minimum MSE
+```
+
+```{r}
+lasso.fit <- lars(X,y,type="lasso")
+fit.lasso.full <- glmnet(X, y, alpha=1)
+par(mfrow=c(1,2))
+plot(fit.lasso.full, xvar="lambda", label=TRUE)
+plot(lasso.fit, lwd=2, breaks=F)
+```
+
+```{r}
+lasso.cv <- cv.lars(X, y, K=10, trace=F, plot.it=T, se=T, type="lasso")
+```
+
+```{r}
+op.frac.lasso <- lasso.cv$index[which.min(lasso.cv$cv)]
+op.frac.lasso
+```
+
+Below we display the variables selected using the lasso model along with the coefficients for each variables 
+```{r}
+beta <- predict(lasso.fit, X_test, s=op.frac.lasso,type="coef", mode="fraction")$coef
+beta[beta !=0]
+```
+
+```{r}
+y.pred <- predict(lasso.fit,X_test, s=op.frac.lasso, type="fit", mode="fraction")$fit
+
+```
+
+Calculating the Lasso Model Fit statistics 
+
+```{r}
+lasso.R2 <- function(Y,Yhat){
+  R2 <- (abs(1 - (sum((Y-Yhat)^2)/sum((Y-mean(Y))^2))))
+  return(R2)
+}
+lasso.MSE <- function(Y,Yhat){
+  return(mean((Yhat-(mean(Y)))^2))
+}
+lasso.SSE <- function(Y, Yhat){
+  SSE <- (sum((Y-Yhat)^2))
+  return(SSE)
+}
+lasso.SSR <- function(Y, Yhat){
+  SSR <- (sum((Yhat- (mean(Y)))^2))
+  return(SSR)
+}
+lasso.SSTO <- function(Y, Yhat){
+  SSTO <- (sum((Y- (mean(Yhat)))^2))
+  return(SSTO)
+}
+
+```
+
+```{r}
+print('Lasso r2 score')
+lasso.R2(y, y.pred)
+print('Lasso MSE')
+lasso.MSE(y,y.pred)
+print('Lasso SSE')
+lasso.SSE(y,y.pred)
+print('Lasso SSR')
+lasso.SSR(y,y.pred)
+print('Lasso SSTO')
+lasso.SSTO(y,y.pred)
+
+```
+
+
+## Partial Least Squares Model 
+
+```{r}
+pls.fit = plsr(y~., data=train, scale=TRUE, validation="CV") #fitting the model via. cross validation 
+summary(pls.fit)
+```
+
+```{r}
+validationplot(pls.fit, val.type = "MSEP")
+```
+
+
+Using model fit with optimal number of principal components to predict Y on Test data 
+
+```{r}
+plsYhat=predict(pls.fit,X_test,ncomp = 23) 
+```
+
+Calculating Partial Least Squares Predicted Model Fit Statistics 
+
+```{r}
+PLS.R2 <- function(Y,Yhat){
+  R2 <- (abs(1 - (sum((Y-Yhat)^2)/sum((Y-mean(Y))^2))))
+  return(R2)
+}
+PLS.MSE <- function(Y,Yhat){
+  return(mean((Yhat-(mean(Y)))^2))
+}
+PLS.SSE <- function(Y, Yhat){
+  SSE <- (sum((Y-Yhat)^2))
+  return(SSE)
+}
+PLS.SSR <- function(Y, Yhat){
+  SSR <- (sum((Yhat- (mean(Y)))^2))
+  return(SSR)
+}
+PLS.SSTO <- function(Y, Yhat){
+  SSTO <- (sum((Y- (mean(Yhat)))^2))
+  return(SSTO)
+}
+```
+
+```{r}
+print('PLS r2 score')
+PLS.R2(y, plsYhat) 
+print('PLS MSE score')
+PLS.MSE(y, plsYhat) 
+print('PLS SSE score')
+PLS.SSE(y, plsYhat) 
+print('PLS SSR score')
+PLS.SSR(y, plsYhat)
+print('PLS SSTO score')
+PLS.SSTO(y, plsYhat) 
+```
+
+
+

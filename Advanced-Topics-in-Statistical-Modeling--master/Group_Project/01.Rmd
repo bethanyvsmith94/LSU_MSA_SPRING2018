@@ -1,0 +1,301 @@
+---
+title: "Exploration"
+author: "Bethany V Smith"
+date: "February 20, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library('ggplot2') # visualization
+library('ggthemes') # visualization
+library('scales') # visualization
+library('grid') # visualisation
+library('gridExtra') # visualisation
+library('corrplot') # visualisation
+library('ggfortify') # visualisation
+library('dplyr') # data manipulation
+library('readr') # data input
+library('tibble') # data wrangling
+library('stringr') # string manipulation
+library('forcats') # factor manipulation
+library('mclust') # clustering
+```
+```{r}
+train <- read.csv("C:/Users/betha/Desktop/EXST_7152/Group_Project/train.csv")
+test <- read.csv("C:/Users/betha/Desktop/EXST_7152/Group_Project/test.csv")
+```
+
+```{r}
+glimpse(train)
+```
+
+
+We see that the training data set has a total of 385 unique variables and a total of 4209 observations. The data set has eight categorical variables and 377 numeric continuous observations. 
+```{r}
+for (i in seq(3,10)){
+  print(str_c("Feature", colnames(train)[i], "has these unique values:", sep=" "))
+  print(str_sort(unique(train[[i]])))
+}
+```
+Also, all values follow a similar pattern of encoding by one or two letters. We don’t know what these letter codes represent, but since we are dealing with car customisation it seems resonable to assume that they encode multiple-choice features for your car specifications. An obvious example would be the colour of the car, which shouldn’t have an impact on the testing performance and could therefore correspond to the missing X7 or X9.
+
+(As an aside: I can imagine that one could make an educated guess about the real identity of these multi-level features from the number of the levels and their “popularity” in our data, if one were inclined to do so.)
+
+```{r}
+sum(is.na(train))
+```
+
+There are no missing values in the training data set. 
+
+I next want to recode the categorical variables as factors. 
+```{r}
+train <- train %>%
+  mutate_at(vars(X0:X8), funs(factor))
+test <- test %>%
+  mutate_at(vars(X0:X8), funs(factor))
+
+
+train_f <- train %>%
+  mutate_at(vars(starts_with("X")), funs(factor))
+test_f <- test %>%
+  mutate_at(vars(starts_with("X")), funs(factor))
+
+
+
+
+```
+
+#2. Visualizations and Exploratory Analysis 
+
+```{r}
+lsize <- length(train)-2
+levels <- tibble(
+  nr = seq(1,lsize),
+  name = "test",
+  counts = rep(0,lsize)
+)
+
+for (i in seq(3,length(train_f))){
+  levels$name[i-2] <- colnames(train_f)[i]
+  levels$counts[i-2] <- fct_unique(train_f[[i]]) %>% length()
+}
+
+levels %>%
+  filter(counts < 2) %>%
+  count()
+
+```
+We see from above that there are a total of 12 variables within the dataset without any variation. These classifiers wont contribute any unique variation, or predictive information, for training our classification variables with. Thus, since they arent contributing anything to training, and prediciting our target, we might as well just disregard them. 
+
+
+```{r}
+zero_var_col <- levels %>% 
+  filter(levels$counts < 2) %>% 
+  select(name)
+print(zero_var_col)
+```
+
+```{r}
+good_var_col <- levels %>% 
+  filter(levels$counts > 1) %>% 
+  select(name)
+
+train <- train %>%
+  select_(.dots = c("ID", "y", good_var_col$name))
+test <- test %>%
+  select_(.dots = c("ID", good_var_col$name))
+```
+
+above we remove those features without any unique variation. 
+
+
+Below we look at the correlation between those categorical variables in the training data set. Those variables that were initally loaded as text variables, and that were manipulated above to be factors. 
+
+```{r}
+train %>%
+  select(y,X0:X8) %>%
+  mutate_at(vars(starts_with("X")), funs(as.integer)) %>%
+  cor(use="complete.obs", method="pearson") %>%
+  corrplot(type="lower", method="number", diag=FALSE)
+
+
+```
+We see from the plot above that those categorical variables with somewhat decent correlation with our target variable y. However, none of these correlations are greater than .5 thus none of the correlations are significant, while others basically have no correlation at all. 
+
+```{r}
+train %>%
+  ggplot(aes(y)) +
+  geom_histogram(colour="red", bins = length(train$y)/3) +
+  geom_density() +
+  labs(x = "y - testing time in seconds")
+```
+##Above is a histogram/density plot of the distribution of the target variable y- testing time in seconds. We see a couple of things from this plot above: 
+
+1. there is a wide variation in the units of y with what appears to be the largest value of y being greater than 250 while the lowest is less than 75 seconds. 
+
+2. The highest density peak in our graph is less than 100, at what is estimated to be roughly y=25 seconds. The second highest density peak is at roughly y=110 seconds and the third highest peak is estimated to be at y=100 seconds. 
+
+3. It appears as if from this histogram/density plot above that we have one extreme observation (outlier) of the dependent variable estimated to be y=265. 
+
+
+Below we re-draw the distribution with these highest peaks outlined in red, to distinguish them. 
+```{r}
+train %>%
+  ggplot(aes(y)) +
+  geom_vline(xintercept = c(76,90,100,110), colour="red")+
+  geom_histogram(colour="yellow", bins = length(train$y)/3) +
+  geom_density() +
+  labs(x = "y - testing time in seconds")
+```
+
+We next try to further identify key points within out plot above, to identify the key lowest points in the distribution. 
+The key lowest points are: 
+1. y=80
+2. y=95
+3. y=105
+
+Below we further identify the lower points of the distribution by putting blue lines at these points. 
+
+
+```{r}
+train %>%
+  ggplot(aes(y)) +
+  geom_vline(xintercept = c(76,90,100,110), colour="red")+
+  geom_vline(xintercept = c(80,95,105), colour="blue")+
+  geom_histogram(colour="yellow", bins = length(train$y)/3) +
+  geom_density() +
+  labs(x = "y - testing time in seconds")
+```
+Next in order to make the x axis easier to read, but still accounting for the large time-scales of specific observations we can place a logarithmic scale on this plot. We do this in the code below. 
+
+
+
+```{r}
+train %>%
+  ggplot(aes(y)) +
+  geom_vline(xintercept = c(76,90,100,110), colour="red")+ #taking those 3 bins and highlighting in red the 4 main peaks of the data 
+  geom_vline(xintercept = c(80,95,105), colour="blue")+  #highlighting in blue the 3 lowest peaks within the binned data
+  geom_histogram(colour="yellow", bins = length(train$y)/3) + #dividing the data into three bins
+  geom_density() + #fitting the density
+  scale_x_log10(breaks=c(seq(70,150,10),seq(170,270,20)) ) + 
+  labs(x = "y - testing time in seconds")
+```
+
+
+```{r}
+train <- train %>%
+  filter(y < 250)
+
+```
+
+```{r}
+ggplot(train, aes(reorder(X0, y, FUN = median) , y)) + geom_boxplot() + labs(x = "X0") +
+  geom_jitter(color="red", width = 0.2, size = 0.4)
+```
+```{r}
+
+ggplot(train, aes(reorder(X1, y, FUN=median), y)) +
+  geom_boxplot()+
+  labs(x="X1")+
+  geom_jitter(color='blue', width=.02, size=.04)
+
+```
+
+```{r}
+ggplot(train, aes(reorder(X2, y, FUN=median), y))+
+  geom_boxplot()+
+  labs(x="X2")+
+  geom_jitter(color="blue", width=.2, size=.4)
+```
+```{r}
+ggplot(train, aes(reorder(X3, y, FUN=median),y)) + 
+  geom_boxplot() +
+  labs(x="X3")+
+  geom_jitter(color="blue", width=.2, size=.4)
+  
+```
+```{r}
+
+ggplot(train, aes(reorder(X4, y, FUN=median),y)) + 
+  geom_boxplot() +
+  labs(x="X4")+
+  geom_jitter(color="blue", width=.2, size=.4)
+  
+```
+
+```{r}
+
+ggplot(train, aes(reorder(X5, y, FUN=median),y)) + 
+  geom_boxplot() +
+  labs(x="X5")+
+  geom_jitter(color="blue", width=.2, size=.4)
+  
+```
+```{r}
+
+
+ggplot(train, aes(reorder(X5, y, FUN=median),y)) + 
+  geom_boxplot() +
+  labs(x="X5")+
+  geom_jitter(color="blue", width=.2, size=.4)
+  
+```
+
+
+```{r}
+
+
+ggplot(train, aes(reorder(X6, y, FUN=median),y)) + 
+  geom_boxplot() +
+  labs(x="X6")+
+  geom_jitter(color="blue", width=.2, size=.4)
+  
+```
+
+
+```{r}
+
+
+ggplot(train, aes(reorder(X8, y, FUN=median),y)) + 
+  geom_boxplot() +
+  labs(x="X8")+
+  geom_jitter(color="blue", width=.4, size=.6)
+  
+```
+
+```{r}
+train %>%
+  group_by(X8) %>%
+  select(y) %>%
+  plot()
+```
+```{r}
+a <- train %>%
+  group_by(X0)%>%
+    select(y)
+
+ggplot(a, aes(X0,y)) +
+  geom_col()
+```
+
+
+
+```{r}
+ggplot(train, aes(X0, y))+ geom_bar(stat="identity", fill="darkblue") + scale_x_discrete("X0")
+```
+
+```{r}
+library("vcdExtra")
+```
+
+
+```{r}
+train$Y <- as.factor(train$y)
+(spine(Y ~ X0, data=train, breaks= "Scott"))
+```
+

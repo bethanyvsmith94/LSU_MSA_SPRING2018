@@ -1,0 +1,462 @@
+---
+title: "Project1.5"
+author: "Bethany V Smith"
+date: "February 6, 2018"
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library("tidyverse")
+library("dplyr")
+library("fitdistrplus")
+library("simstudy")
+library("ggplot2")
+library("boot")
+library("bootstrap")
+library("formattable")
+```
+
+#**Reading in Data**
+
+```{r}
+
+setwd("C:/Users/betha/Desktop/EXST_7152/EXST7152/Projects/Project1") #setting working directory
+getwd() #double checking that the above setwd() operation was successful
+
+data <- read.csv("SPdata.csv") #reading in the current dataset 
+glimpse(data) 
+
+```
+
+
+*It is important to note that the rows of the data set were reversed prior to loading them into the R environment, thus the current data set is ordered from the oldest date starting  as the first observation, to the newest date as the last observation in the data set*
+
+*The code below is used in order to create a new data frame that contains the price data with the dates as the row names. We see that the original dataset, and the prices variable has a total of 2529 observations.*
+```{r}
+prices <- data[,"Adj.Close", drop=FALSE] # 
+n <- nrow(prices) #the total number of observations in the original csv data file 
+n
+```
+## 1.
+
+###**Load the data file, take the last column (containing the daily closing price), and calculate the logarithmic returns based only on the closing price. Note that the file is in reverse chronological order (newest first). When you are done, if everything worked right, running summary on the returns series should give the following. Hint: use read.csv to load the data, use rev to reverse the order and diff & log to get the log-return**
+
+
+```{r}
+
+SP_daily_returns <- as.numeric(log(prices[2:n,1]/prices[1:(n-1),1])) #calculate the log returns 
+N <- length(SP_daily_returns)
+N
+```
+
+###*By manipulating the prices data set using 2:n, we are telling R to start at the second observation in the table and read all observations from 2 to the end of the file. We use 1:n-1 to tell R to start at the first observation and read to the second to last observation in the data set. By manipulating the prices dataset in this way we are able to calculate the log daily returns of a stocks closing price today divided by the closing price of yesterday. We see that when calculating the log daily returns of the closing stock price, we loose one observation and thus the total number of observations in SP_daily_returns which is the log returns daily values, is 2528.*
+
+```{r}
+# Add dates as names to the vector of returns 
+names(SP_daily_returns) <- data[2:n,1]
+
+#make sure it worked
+head(SP_daily_returns)
+
+```
+
+*Double checking to make sure that the above calculations were correct*
+
+```{r}
+summary(SP_daily_returns)
+
+```
+
+
+*Answer: We see that, when running a summary of the daily price returns, SP_daily_returns, we get the above results. These results coeincide with what we expect to get and are evidence that the manipulations of the closing stock prices were done correctly.*
+
+
+
+##2. ** In many applications in finance, it is common to model daily returns as independent Gaussian variables.**
+
+###**a) Find the mean and standard deviation of the best-fitting Gaussian distribution, and the Q(0.01) it implies. Note, this Q(0.01) is NOT the one from the data, but the one from the best-fitting Gaussian distribution, which has the same mean and standard deviation as the ones from the data**
+
+```{r}
+
+
+mu.SP_daily_returns = mean(SP_daily_returns) # the estimated mean of the log returns of the origianl data set 
+sd.SP_daily_returns = sd(SP_daily_returns) # the estimated standard deviation of the log returns of the original data set 
+quantile_01 = qnorm(0.01,mu.SP_daily_returns,sd.SP_daily_returns)  #calculating the .01 quantile for a Gaussian distribution using the original log returns estimated mean and standard deviation
+
+answera <- as.table(c(mu.SP_daily_returns,sd.SP_daily_returns,quantile_01)) #formatting
+row.names(answera)<- c("Mean", "SD", ".01 Quantile") #formatting
+answera
+
+```
+*Answer: We see from the above calculations that the mean of the original data sets log returns is estimated to be -6.404402e05, while the standard error is 1.400158e-02. We use the original datas estimated mean and standard deviation as inputs when estimating the .01 quantile for the best fitting Gaussian distribution. The best fitting Gaussian distribution provides an estimated .01 quantile equal to -3.263659e-02.*
+
+###**b) Write a function which simulates a data set of the same size as the real data, using the independent Gaussian model you fit in part (a) above, and returns a list, with components named mean and sd, containing the parameter values estimated from the simulation output.**
+```{r}
+set.seed(1)
+N=2528 #length of log returns and the number of observations required to be in the simulated data
+
+simulated.returns.model = function(mu.SP_daily_returns,sd.SP_daily_returns,N){ #creating the function that will be called upon in order to simulate the data and return a list
+  simulated.SP_daily_returns = rnorm(n = N, mean = mu.SP_daily_returns,sd =  sd.SP_daily_returns) # creating new simulated data from the gaussian normal distribution
+  simulated.mean = mean(simulated.SP_daily_returns) #mean of the simulated data using the simulated data set as an input
+  simulated.sd = sd(simulated.SP_daily_returns) # standard deviation of the simulated data using the simulated data set as an input
+  out = list(mean = simulated.mean, sd = simulated.sd) # outputting the value of the mean and sd of simulated data
+  return(out)
+}
+```
+
+```{r}
+set.seed(1)
+simulated.returns.model(mu.SP_daily_returns, sd.SP_daily_returns,N) #calling on function created in the above code to calculate the mean and standard deviation of the simulated dataset
+```
+
+**Answer: We see from the above code that the output parameters estimated from the Guassian distribution simulated dataset are an estimated mean equal to -0.000254 and an estimated standard error equal to 0.0145. These estimated parameter values are similar but not exactly the same as the true estimates that were used as inputs for simulating the inependent Guassian distribution from the log returns of the original log returns data.**
+
+
+### *c) Write a function which takes as arguments a list with components named mean and sd, and returns the first percentile of the corresponding Gaussian distribution. Check that it works by verifying that when run with mean 5 and sd 2, it returns 0.347.*
+
+```{r}
+Gaussian_firstpercentile = function(mean.sd.list){ #function which pulls the mean and standard deviation from the list used as inputs to the function 
+  estimatedq=qnorm(0.01,mean.sd.list$mean, mean.sd.list$sd) #we take these mean and standard deviation estimates and feed them into the qnorm function to estimate the .01 quantile of the Guassian distributed data
+  return(estimatedq)
+}
+
+checking_solution = list(mean=5,sd=2)
+Gaussian_firstpercentile(checking_solution)
+```
+
+***Answer: We see that when providing the function created above with a list containing a mean =5 and a standard deviation = 2, we obtain the Gaussian distributions .01 quantile estimate = 0.347. This quantile estimate matches the quantile estimate we expect to obtain if the function written is properly working. Thus, we conclude the function in 2c correctly estimates the .01 quantile of a Gaussian distribution.***
+
+
+### *d) Using the code you wrote in (b) and (c) above, find a 95 percentile bootstrap confidence interval for your estimate of Q(0.01) from (a) based on your parametric bootstrapping samples.*
+
+```{r}
+set.seed(1)
+B=2000
+draws=vector(length=2000)
+for (i in 1:B){
+  simulation=simulated.returns.model(mu.SP_daily_returns, sd.SP_daily_returns, N) #simulating Gaussian Distribution like in 2b
+  draws[i]= Gaussian_firstpercentile(simulation) #simulating quantile estimate using 2c function
+}
+
+
+
+```
+
+
+```{r}
+answerd_lower <- (quantile_01 + -1 * 2 * sd(draws)) #CI calculation
+answerd_upper <- (quantile_01 + 1 * 2 * sd(draws)) 
+```
+
+```{r echo=FALSE}
+answer_2d <- as.table(c(answerd_lower, quantile_01, answerd_upper))
+row.names(answer_2d) <- c("0.975 Lower CI","Sim Quant Est", "Upper .025 CI") #formatting
+answer_2d
+```
+
+***Answer: We see from the above calculation and output, that when finding a 95% bootstrap confidence interval for the .01 quantile estimated in 2a (quantile_01 is the variable name for the quantile found in 2a), we get the lower estimated CI = -0.0337 and the upper estimated CI = -0.03157.**
+
+
+###*e) What is the first percentile of the data? Is it within the confidence interval you found in (d)?*
+
+```{r}
+log_returns_quantile = quantile(p=0.01,SP_daily_returns)
+log_returns_quantile
+```
+
+```{r}
+answere_lower <- (quantile_01 + -1 * 2 * sd(draws)) #CI calculation
+answere_upper <- (quantile_01 + 1 * 2 * sd(draws)) 
+
+```
+
+```{r echo=FALSE}
+answer_2e <- as.table(c(answerd_lower, log_returns_quantile, answerd_upper))
+row.names(answer_2e) <- c("0.975 Lower CI","Data Quant Est", "Upper .025 CI") #formatting
+answer_2e
+```
+
+**Answer : We see from the above calculation that the estimated first percentile of the true data, SP_daily_returns, is -0.039. We see above that in answer d  the Upper end of the confidence interval is -.03157 while the lower end of the confidence interval is -0.0337. The confidence interval estimated in answer d, is very narrow and is not large enough to encampsulate the estimated first perentile of the true data, -0.039. **
+
+
+
+##3. *Use density(), or any other suitable non-parametric density estimator, to plot the distribution of returns. Also plot, on the same graph, the Gaussian distribution you fit in problem 2. Comment on their differences.*
+
+```{r}
+
+Y1 <-  as.numeric(log(prices[2:n,1]/prices[1:(n-1),1])) #  original datas log returns
+Y2 <- rnorm(N, mu.SP_daily_returns, sd.SP_daily_returns) #Gaussian distribution simulated data using the true datas mean and standard deviation
+Y2 <- as.numeric(Y2)
+plot(density(Y1),xlab="Log Returns", main="Distribution comparison of log_returns vs. Gaussian_returns"); lines(density(Y2), col="red" );legend("topleft", inset=.02, title="Data Distribution", legend=c("Log Returns", "Gaussian Returns"), col= c("black", "red"), fill=c("black", "red"))
+
+
+```
+
+**Answer: Based on a visual inspection of the above density plot we see that there appears to be a significant difference between the true distribution of the original log returns data (black line) and that of the Guassian distributed data (red line). From a visual perspective, there appears to be a significant amount of kurtosis in the origianl data set (black line). We see that the original data is centered in the middle of the x-axis at 0 and so is the Guassian simulated data. However, the density of the original log returns data is estimated at density = .40 while the simulated data has an estimated density = .30.**
+
+
+```{r}
+normality_original <- shapiro.test(Y1) #testing for normality of the original log returns data
+normality_simulated <- shapiro.test(Y2) #testing for normality of the Guassian simulated data
+
+normality_original
+normality_simulated
+```
+**Answer: we further investigate normality for the original and Guassian distributions in an effort to provide further support to the graphical interpretation of the distributions displayed in the density plot above. We see in the results above that when calculating the Shapiro Wilk normality test for the original data we get a significant p value < 2.2e-16. This provides sufficient evidence to reject the null hypothesis in favor of the alternative; the original log returns data is not normally distributed. However, we see that when conducting the Shapiro Wilk normality test for the Guassian distribution simulated data, we get a p value = 0.8664. Thus for the Gaussian distribution we have insufficient evidence to reject the null hypothesis, the simulated data is normally distributed.**
+
+##4.
+###*Write a function to bootstrap the returns, and calculate Q(0.01) on each bootstrap dataset. Use this to find a 95% bootstrap interval for Q(0.01). Compare it with the confidence interval from (2d) and comment. Hint: Look at the examples in the notes of non-parametric bootstrapping.*
+
+
+```{r }
+
+set.seed(789)
+boot_ght <- function(data,index){
+  out_sample <- quantile(SP_daily_returns[index], 0.01)
+  return(out_sample)
+
+}
+
+
+```
+
+```{r}
+boot(SP_daily_returns,boot_ght,1000)
+```
+
+
+```{r}
+set.seed(789)
+boot_quantile_estimate <- -0.03923286 #saving bootstraped quantile estimate from above function 
+boot_quantile_serror <- 0.003566181 #saving bootstraped s.e. estimated from above  function 
+
+
+```
+
+
+
+```{r}
+
+answer4boot_lower <- (boot_quantile_estimate  -1 * 2 * boot_quantile_serror) #CI lower calculation for bootstrap quant estimate
+answer4boot_upper <- (boot_quantile_estimate + 1 * 2 * boot_quantile_serror) #CI upper calculation for bootstrap quant estimate
+
+
+```
+
+
+```{r include=FALSE}
+answer_4bootCI <- as.table(c(answer4boot_lower, log_returns_quantile, answer4boot_upper)) #combining estimates
+row.names(answer_4bootCI) <- c("0.975 Lower CI","Data Quant Est", "Upper .025 CI") #formatting
+
+CI_1 <- rbind(answer_4bootCI, answer_2e, answer_2d)
+c1_1 <- data.frame(CI_1)
+
+
+```
+
+```{r echo=FALSE}
+formattable(c1_1)
+
+
+```
+
+
+
+**We see that when we bootstrap the original data SP_daily_returns, and continuously resample the data and then estimate the quantile and develop a confidence interval to fit the bootstrapped quantile estimate, the confidence interval is much wider than the one developed in 2d and is able to  encapsulate the quantile estimate of the true data,log returns. The above table comparing the various confidence intervals enables us to see that the confidence interval fit to the guassian normal distribution(2e), is too narrow to include the true datas quantile estimate(-0.039). Furthermore, we see that the confidence interval estimated using the guassian distribution (2d), is incredibly narrow but does encapsulate the quantile estimated with the guassian distribution in problem 2a. It is important to note that numerous Bootstrap estimates were calculated with varying values for iterations before finding that 1000 provided us with the smallest, stable bootstrapped standard error.**
+
+
+
+
+
+
+
+# 5. 
+###*Fit a first-order autoregressive model, also called AR(1), to the log returns. Give the estimate of the
+slope ?? and the standard error of {??t}. Also give the reported standard error for ??^.
+
+```{r}
+
+N= length(SP_daily_returns)
+N
+data5 <- data.frame( X = SP_daily_returns[-2527], Y = SP_daily_returns[-1])
+lm.fit <- lm(Y~X, data5)
+y.hat <- lm.fit$fit; resd <- lm.fit$res
+summary(lm.fit)
+length(resd)
+
+
+
+```
+**We see from looking at the coefficient estimates for the above 1st order Auto regressive model that the intercept of the model is -0.00007629 with an estimated standard error of 0.002776. The intercept of the model can be interpreted as meaning that the estimated log returns for day 2 that follows a day  in which the log returns were zero are estimated to be incredibly low (-0.0000769).Additionally we see that the estimated coeficient for Beta hat (X here is the coefficient for yesterdays  growth in returns), is -0.0822103. Thus, we can interpret this coefficient to mean that if  yesterday saw a 1 unit increase in its log returns, yesterdays 1 unit increase in log returns is associated with a -0.082 decrease in todays log returns. 
+
+
+
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm.fit)
+```
+
+
+
+
+# *6. Find the bootstrap standard error for the slope ?? by using the bootstrapping the residuals.* 
+
+
+
+
+
+
+
+
+
+#Bootstrapping for best B 
+
+
+
+#### Bootstrapping with B=100
+```{r}
+set.seed(111)
+#creating the function for resampling the original dataset 
+bootstrapresample = function(SP_daily_returns)
+  {boot.sample = sample(SP_daily_returns, size=2528, replace = TRUE)
+ return(boot.sample)
+}
+
+#taking the resampled dataset and developing the quantile estimates for each resampled dataset 
+bootquant = function(data,index){
+  resampled_boot = bootstrapresample(data)
+  qboot = quantile(resampled_boot[index],0.01)
+  return(qboot)
+}
+  
+boot(SP_daily_returns,bootquant,100)
+
+
+```
+
+
+
+#### Bootstrapping with B=500
+
+```{r}
+set.seed(112)
+#creating the function for resampling the original dataset 
+bootstrapresample = function(SP_daily_returns)
+  {boot.sample = sample(SP_daily_returns, size=2528, replace = TRUE)
+ return(boot.sample)
+}
+
+#taking the resampled dataset and developing the quantile estimates for each resampled dataset 
+bootquant = function(data,index){
+  resampled_boot = bootstrapresample(data)
+  qboot = quantile(resampled_boot[index],0.01)
+  return(qboot)
+}
+  
+boot(SP_daily_returns,bootquant,500)
+
+
+```
+
+
+
+
+
+
+#### Bootstrapping with B=1000
+```{r}
+set.seed(114)
+#creating the function for resampling the original dataset 
+bootstrapresample = function(SP_daily_returns)
+  {boot.sample = sample(SP_daily_returns, size=2528, replace = TRUE)
+ return(boot.sample)
+}
+
+#taking the resampled dataset and developing the quantile estimates for each resampled dataset 
+bootquant = function(data,index){
+  resampled_boot = bootstrapresample(data)
+  qboot = quantile(resampled_boot[index],0.01)
+  return(qboot)
+}
+  
+boot(SP_daily_returns,bootquant,1000)
+
+
+```
+
+
+
+#### Bootstrapping with B=2000
+
+```{r}
+set.seed(115)
+#creating the function for resampling the original dataset 
+bootstrapresample = function(SP_daily_returns)
+  {boot.sample = sample(SP_daily_returns, size=2528, replace = TRUE)
+ return(boot.sample)
+}
+
+#taking the resampled dataset and developing the quantile estimates for each resampled dataset 
+bootquant = function(data,index){
+  resampled_boot = bootstrapresample(data)
+  qboot = quantile(resampled_boot[index],0.01)
+  return(qboot)
+}
+  
+boot(SP_daily_returns,bootquant,2000)
+
+
+```
+
+
+#### Bootstrapping with B=3000
+```{r}
+set.seed(118)
+#creating the function for resampling the original dataset 
+bootstrapresample = function(SP_daily_returns)
+  {boot.sample = sample(SP_daily_returns, size=2528, replace = TRUE)
+ return(boot.sample)
+}
+
+#taking the resampled dataset and developing the quantile estimates for each resampled dataset 
+bootquant = function(data,index){
+  resampled_boot = bootstrapresample(data)
+  qboot = quantile(resampled_boot[index],0.01)
+  return(qboot)
+}
+  
+boot(SP_daily_returns,bootquant,3000)
+
+
+```
+
+
+
+#### Bootstrapping with B=4000
+```{r}
+set.seed(125)
+#creating the function for resampling the original dataset 
+bootstrapresample = function(SP_daily_returns)
+  {boot.sample = sample(SP_daily_returns, size=2528, replace = TRUE)
+ return(boot.sample)
+}
+
+#taking the resampled dataset and developing the quantile estimates for each resampled dataset 
+bootquant = function(data,index){
+  resampled_boot = bootstrapresample(data)
+  qboot = quantile(resampled_boot[index],0.01)
+  return(qboot)
+}
+  
+boot(SP_daily_returns,bootquant,4000)
+
+
+```
