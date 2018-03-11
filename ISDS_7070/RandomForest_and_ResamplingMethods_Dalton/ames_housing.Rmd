@@ -1,0 +1,354 @@
+---
+title: "Ames Housing"
+author: "Dalton Hall"
+date: "March 1, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+###Loading Packages and Cleaning Data
+####Installing libraries
+```{r}
+library(tidyverse)
+library(haven)
+library(randomForest) #used for performing random forest
+library(caret) #used for resampling methods
+```
+
+####Loading data
+```{r}
+ames <- read_sas('ames7070.sas7bdat')
+
+colnames(ames) <- tolower(colnames(ames))
+
+colnames(ames)
+```
+
+#####Filtering predictor columns
+```{r}
+filt <- function(df) {
+  df <- df %>% 
+  select(bonus, gr_liv_area, fullbath_2plus, age_at_sale, high_exterior_qual, overall_quality, high_kitchen_quality, twopluscar_garage, total_bsmt_sf, open_porch_sf, lot_area, fireplace_1plus, vinyl_siding, overall_condition, irreg_lot_shape, bedroom_abvgr, remodel)
+  return(df)
+} 
+```
+
+```{r}
+ames2 <- filt(ames)
+
+colnames(ames2)
+```
+
+#####Setting correct variable classes
+```{r}
+str(ames2)
+```
+
+#####Setting levels to character for caret package
+```{r}
+ames2$bonus <- ifelse(ames2$bonus == 1, "y", "n")
+```
+
+#####Defining correct class function
+```{r}
+correct_class <- function(df) {
+  df$bonus <- as.ordered(df$bonus)
+  df$gr_liv_area <- as.numeric(df$gr_liv_area)
+  df$fullbath_2plus <- as.ordered(df$fullbath_2plus)
+  df$high_exterior_qual <- as.ordered(df$high_exterior_qual)
+  df$overall_quality <- as.ordered(df$overall_quality)
+  df$high_kitchen_quality <- as.ordered(df$high_kitchen_quality)
+  df$twopluscar_garage <- as.ordered(df$twopluscar_garage)
+  df$total_bsmt_sf <- as.numeric(df$total_bsmt_sf)
+  df$open_porch_sf <- as.numeric(df$open_porch_sf)
+  df$lot_area <- as.numeric(df$lot_area)
+  df$fireplace_1plus <- as.ordered(df$fireplace_1plus)
+  df$vinyl_siding <- as.ordered(df$vinyl_siding)
+  df$overall_condition <- as.ordered(df$overall_condition)
+  df$irreg_lot_shape <- as.ordered(df$irreg_lot_shape)
+  df$bedroom_abvgr <- as.ordered(df$bedroom_abvgr)
+  df$remodel <- as.ordered(df$remodel)
+  return(df)
+}
+```
+
+```{r}
+ames3 <- correct_class(ames2)
+
+str(ames3)
+```
+
+###Modeling
+####Creating data partition
+```{r}
+set.seed(12345)
+inTraining <- createDataPartition(ames3$bonus, p = .7, list = FALSE)
+
+training <- ames3[inTraining, ]
+testing <- ames3[-inTraining, ]
+```
+
+####Defining parameter optimization grid
+```{r}
+rfGrid <- expand.grid(mtry = c(1:(ncol(ames3) - 1)))
+```
+
+####Base Models
+#####Training models
+```{r}
+set.seed(123)
+base_full <- randomForest(bonus ~ . , ames3)
+base_full
+
+set.seed(123)
+base_split <- randomForest(bonus ~ . , training)
+base_split
+```
+
+#####Valdiating model
+```{r}
+base_val <- predict(base_split, newdata = testing)
+
+confusion_matrix <- table(base_val, testing$bonus)
+confusion_matrix
+
+nn <- confusion_matrix[1, 1]
+ny <- confusion_matrix[2, 1]
+yn <- confusion_matrix[1, 2]
+yy <- confusion_matrix[2, 2]
+
+sens <- yy / (yy + yn)
+spec <- nn / (nn + ny)
+class_rate <- (yy + nn) / sum(confusion_matrix)
+two_class <- c("Classification_Rate" = class_rate, "Sensitivity" = sens, "Specificity" = spec)
+two_class
+```
+
+#####Interpreting variable importance from the output
+```{r}
+varImp(base_full)
+```
+
+```{r}
+vi <- varImp(base_full)
+vi$Overall <- sort(vi$Overall, decreasing = TRUE)
+vi
+```
+
+```{r}
+varImpPlot(base_full)
+```
+
+####Bootstrap Sampling
+#####Defining resampling method
+```{r}
+boot <- trainControl(method = "boot",
+                     number = 10,
+                     classProbs = TRUE,
+                     summaryFunction = twoClassSummary)
+```
+
+#####Defining model
+```{r}
+set.seed(123)
+rf1 <- train(bonus ~ . , data = training,
+             method = "rf",
+             trControl = boot,
+             tuneGrid = rfGrid,
+             preProc = c("center", "scale"),
+             metric = "ROC")
+rf1
+```
+
+#####Plotting performance by mytry
+```{r}
+ggplot(rf1)
+```
+
+#####Extracting predictions
+```{r}
+predict1 <- predict(rf1, newdata = testing)
+c_matrix1 <- table(predict1, testing$bonus)
+c_matrix1
+
+nn1 <- c_matrix1[1, 1]
+ny1 <- c_matrix1[2, 1]
+yn1 <- c_matrix1[1, 2]
+yy1 <- c_matrix1[2, 2]
+
+sens1 <- yy1 / (yy1 + yn1)
+spec1 <- nn1 / (nn1 + ny1)
+class_rate1 <- (yy1 + nn1) / sum(c_matrix1)
+two_class1 <- c("Classification_Rate" = class_rate1, "Sensitivity" = sens1, "Specificity" = spec1)
+two_class1
+```
+
+####K-Folds Cross-Validation Sampling
+#####Defining resampling method
+```{r}
+cv <- trainControl(method = "cv", 
+                   classProbs = TRUE,
+                   number = 10,
+                   summaryFunction = twoClassSummary)
+```
+
+#####Defining model
+```{r}
+set.seed(123)
+rf2 <- train(bonus ~ . , data = training,
+             method = "rf",
+             trControl = cv,
+             tuneGrid = rfGrid,
+             preProc = c("center", "scale"),
+             metric = "ROC")
+rf2
+```
+
+#####Plotting performance by mytry
+```{r}
+ggplot(rf2)
+```
+
+#####Extracting predictions
+```{r}
+predict2 <- predict(rf2, newdata = testing)
+c_matrix2 <- table(predict2, testing$bonus)
+c_matrix2
+
+nn2 <- c_matrix2[1, 1]
+ny2 <- c_matrix2[2, 1]
+yn2 <- c_matrix2[1, 2]
+yy2 <- c_matrix2[2, 2]
+
+sens2 <- yy2 / (yy2 + yn2)
+spec2 <- nn2 / (nn2 + ny2)
+class_rate2 <- (yy2 + nn2) / sum(c_matrix2)
+two_class2 <- c("Classification_Rate" = class_rate2, "Sensitivity" = sens2, "Specificity" = spec2)
+two_class2
+```
+
+####Repeated K-Folds Cross-Validation Sampling
+#####Defining resampling method
+```{r}
+rcv <- trainControl(method = "repeatedcv",
+                     number = 10,
+                     repeats = 3,
+                     classProbs = TRUE,
+                     summaryFunction = twoClassSummary)
+```
+
+#####Defining model
+```{r}
+set.seed(123)
+rf3 <- train(bonus ~ . , data = training,
+             method = "rf",
+             trControl = rcv,
+             tuneGrid = rfGrid,
+             preProc = c("center", "scale"),
+             metric = "ROC")
+rf3
+```
+
+#####Plotting performance by mytry
+```{r}
+ggplot(rf3)
+```
+
+#####Extracting predictions
+```{r}
+predict3 <- predict(rf3, newdata = testing)
+c_matrix3 <- table(predict3, testing$bonus)
+c_matrix3
+
+nn3 <- c_matrix3[1, 1]
+ny3 <- c_matrix3[2, 1]
+yn3 <- c_matrix3[1, 2]
+yy3 <- c_matrix3[2, 2]
+
+sens3 <- yy3 / (yy3 + yn3)
+spec3 <- nn3 / (nn3 + ny3)
+class_rate3 <- (yy3 + nn3) / sum(c_matrix3)
+two_class3 <- c("Classification_Rate" = class_rate3, "Sensitivity" = sens3, "Specificity" = spec3)
+two_class3
+```
+
+####Monte Carlo Cross-Validation Sampling
+#####Defining resampling method
+```{r}
+lgocv <- trainControl(method = "LGOCV",
+                     classProbs = TRUE,
+                     p = .7,
+                     summaryFunction = twoClassSummary)
+```
+
+#####Defining model
+```{r}
+set.seed(123)
+rf4 <- train(bonus ~ . , data = training,
+             method = "rf",
+             trControl = lgocv,
+             tuneGrid = rfGrid,
+             preProc = c("center", "scale"),
+             metric = "ROC")
+rf4
+```
+
+#####Plotting performance by mytry
+```{r}
+ggplot(rf4)
+```
+
+#####Extracting predictions
+```{r}
+predict4 <- predict(rf4, newdata = testing)
+c_matrix4 <- table(predict4, testing$bonus)
+c_matrix4
+
+nn4 <- c_matrix4[1, 1]
+ny4 <- c_matrix4[2, 1]
+yn4 <- c_matrix4[1, 2]
+yy4 <- c_matrix4[2, 2]
+
+sens4 <- yy4 / (yy4 + yn4)
+spec4 <- nn4 / (nn4 + ny4)
+class_rate4 <- (yy4 + nn4) / sum(c_matrix4)
+two_class4 <- c("Classification_Rate" = class_rate4, "Sensitivity" = sens4, "Specificity" = spec4)
+two_class4
+```
+
+###Comparing Resampling Models
+#####Comparing ROC, sensitivity, and specificity in training models
+```{r}
+best1 <- rf1$bestTune[1, ]
+best2 <- rf2$bestTune[1, ]
+best3 <- rf3$bestTune[1, ]
+best4 <- rf4$bestTune[1, ]
+
+boot_results <- rf1$results[best1, ]
+cv_results <- rf2$results[best2, ]
+rcv_results <- rf3$results[best3, ]
+lgocv_results <- rf4$results[best4, ]
+
+resamps_best <- rbind.data.frame(boot_results, cv_results, rcv_results, lgocv_results)
+
+row.names(resamps_best) <- c("Boot", "CV", "RCV", "LGOCV")
+
+resamps_best <- resamps_best[order(resamps_best$ROC, decreasing = TRUE), ]
+resamps_best
+```
+
+#####Comparing classification rates in validation models
+```{r}
+val <- cbind.data.frame(two_class, two_class1, two_class2, two_class3, two_class4) %>% 
+  t() %>% 
+  as.data.frame()
+
+row.names(val) <- c("Base", "Boot", "CV", "RCV", "LGOCV")
+
+val <- val[order(val$Classification_Rate, decreasing = TRUE), ]
+val
+```
+
